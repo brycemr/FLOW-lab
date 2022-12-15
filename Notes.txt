@@ -1,0 +1,6 @@
+TODO:
+Add docstrings to functions in Monopile.jl and Depths.jl
+
+Add comments to COE wrapper and CoeDepthOptimization.jl
+
+Fix all the julia 'problems' listed

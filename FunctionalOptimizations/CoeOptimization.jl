@@ -4,66 +4,13 @@ using VectorizedRoutines.Matlab: meshgrid
 using SNOW
 using Plots
 
-function createDiscretePositions(deltaX, x_boundaries, y_boundaries)
-    upperX = x_boundaries[2]
-    lowerX = x_boundaries[1]
-    upperY = y_boundaries[2]
-    lowerY = y_boundaries[1]
-    
-    dimX = Int((upperX - lowerX) / deltaX)+1
-    dimY = Int((upperY - lowerY) / deltaX)+1
-    positions = Array{Int}(undef, 3, (dimX)*(dimY))
-    println(dimX)
-    println(dimY)
-    for i = 0:dimX-1
-        for j = 0:dimY-1
-            # Currently generates random depth data, instead would find depth data at this point
-            index = i*dimY + j + 1
-            positions[:,index] = [lowerX+i*deltaX; lowerY+j*deltaX; rand(4:20)]
-        end
-    end
-    
-    return positions
-end
+turbinex = [-240.0, -240.0, -240.0, 0.0, 0.0, 0.0, 240.0, 240.0, 240.0]
+turbiney = [-240.0, 0.0, 240.0, -240.0, 0.0, 240.0, -240.0, 0.0, 240.0]
+#turbiney = [0.0, 0.0, 0.0]
+#turbinex = [-240.0, 0, 240]
 # INITIAL TURBINE LOCATIONS
-turbineIndices = [1, 13, 25, 301, 313, 325, 601, 613, 625]
 
-discrete_positions = createDiscretePositions(20,[-240, 240],[-240, 240])
-println(discrete_positions[:,3])
-
-turbinex = zeros(size(turbineIndices))
-turbiney = zeros(size(turbineIndices))
-
-for i=eachindex(turbineIndices)
-    turbinex[i] = discrete_positions[1,turbineIndices[i]]
-    turbiney[i] = discrete_positions[1,turbineIndices[i]]
-end
-
-xs = discrete_positions[1,:]
-ys = discrete_positions[2,:]
-zs = discrete_positions[3,:]
-
-println(x)
-println(y)
-
-x, y = sort(unique(xs)), sort(unique(ys)) # the lattice x and y
-C = fill(NaN, length(x), length(y)) # make a 2D C with NaNs
-for i = eachindex(x)
-    for j = eachindex(y)
-        # Currently generates random depth data, instead would find depth data at this point
-        C[i,j] = zs[(i-1)*length(y)+j]
-    end
-end
-C[2,1] = 15
-C[2,2] = 10
-C[2,3] = 15
-C[2,4] = 10
-C[3,3] = 20
-println(x)
-println(y)
-heatmap(x, y, C, clims=(4,20)) # success!
-
-nturbines = length(turbineIndices)
+nturbines = length(turbinex)
 
 turbinez = zeros(nturbines)
 
@@ -80,7 +27,7 @@ hubheight = zeros(nturbines) .+ 70      # m
 cutinspeed = zeros(nturbines) .+ 4.0    # m/s
 cutoutspeed = zeros(nturbines) .+ 25.0   # m/s 
 ratedspeed = zeros(nturbines) .+ 16.0   # m/s 
-ratedpower = zeros(nturbines) .+ 2.0E6  # W
+ratedpower = zeros(nturbines) .+ 2.8E6  # W
 generatorefficiency = ones(nturbines)
 
 # VISUALIZING THE WIND FARM LAYOUT
@@ -155,7 +102,11 @@ aep = ff.calculate_aep(turbinex, turbiney, turbinez, rotordiameter,
     modelset, rotor_sample_points_y=rotorsamplepointsy, 
     rotor_sample_points_z=rotorsamplepointsz)
 
-coe = ff.cost_of_energy(rotordiameter, hubheight, ratedpower, aep, ff.Levelized())
+
+total_ratedpower = sum(ratedpower)
+coe_aep = aep/total_ratedpower # For the LCOE equation we need aep in MWh/MW/year not Wh/year (same as hr/year)
+coe_ratedpower = ratedpower./1000 # needs to be in units of kw
+coe = ff.cost_of_energy(rotordiameter, hubheight, coe_ratedpower, coe_aep, ff.Levelized())
 
 println("$aep Watt-hours per year")
 # AEP in each direction
@@ -182,7 +133,7 @@ constraintscalespacing = 1.0
 minimumspacing = 100
 
 # set up a struct for use in optimization functions, these are the non-differentiated parameters
-mutable struct params_struct2{}
+mutable struct params_struct3{}
     modelset
     rotorsamplepointsy
     rotorsamplepointsz
@@ -207,7 +158,7 @@ mutable struct params_struct2{}
     powermodels
 end
 
-params = params_struct2(modelset, rotorsamplepointsy, rotorsamplepointsz, turbinez, ambientti,
+params = params_struct3(modelset, rotorsamplepointsy, rotorsamplepointsz, turbinez, ambientti,
     rotordiameter, boundarycenter, boundaryradius, objectivescale, constraintscaleboundary,
     constraintscalespacing, minimumspacing, hubheight, turbineyaw,
     ctmodels, generatorefficiency, cutinspeed, cutoutspeed, ratedspeed, ratedpower,
@@ -298,11 +249,14 @@ function coe_wrapper(x, params)
     cutoutspeed, ratedspeed, ratedpower, windresource, powermodels, modelset,
     rotor_sample_points_y=rotorsamplepointsy,rotor_sample_points_z=rotorsamplepointsz)
 
+    total_ratedpower = sum(ratedpower)
+    coe_aep = aep/total_ratedpower # For the LCOE equation we need aep in MWh/MW/year not Wh/year (same as hr/year)
+    coe_ratedpower = ratedpower./1000 # needs to be in units of kw
     cost = ff.Levelized()
     #cost.FC = cost.FC + total_monopile_cost(x, params)
-
-    coe = objectivescale.*ff.cost_of_energy(rotordiameter, hubheight, ratedpower,  aep, cost)
-
+    print("\n cost: $cost")
+    coe = objectivescale.*ff.cost_of_energy(rotordiameter, hubheight, coe_ratedpower,  coe_aep, cost)
+    print("\n COE: $coe \n")
     return coe
 end
 
@@ -388,4 +342,3 @@ ax.add_patch(circle)
 ax.set(xlim=[-boundaryradius, boundaryradius].*1.01, ylim=[-boundaryradius, boundaryradius].*1.01)
 
 display(fig)
-=#
