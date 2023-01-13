@@ -1,3 +1,14 @@
+"""
+    mapDepths(resolution, x_boundaries, y_boundaries, distribution, gausStartDepth, linnStartDepth, linDepthVariance, centerIsShallow, isLinear, isGaus1D, isGaus2D, gausMaxDepth, gausMinDepth)
+
+Creates a heat map for a specified water depth pattern.
+# Arguments
+-'resolution::Int': Resolution of the of the x and y axis for the heat map
+-'x_boundaries::array': Vector of the minimum and maximum of the x-axis
+-'y_boundaries::array': Vector of the minimum and maximum of the y-axis
+-'distribution::??': ?????
+-
+"""
 function mapDepths(resolution, x_boundaries, y_boundaries, distribution, gausStartDepth, linStartDepth, linDepthVariance, centerIsShallow, isLinear, isGaus1D, isGaus2D, gausMaxDepth, gausMinDepth)
     upperX = x_boundaries[2]
     lowerX = x_boundaries[1]

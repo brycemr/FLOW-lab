@@ -1,74 +1,37 @@
-
 using Roots
 using Test
 
-function total_monopile_cost(x, params)
-    cost = 0
-    
-    nturbines = Int(length(x)/2)
-    
-    mean_windspeed = params.meanWindspeed
-    rotordiameter = params.rotordiameter
-    hub_height = params.hubheight
-    rated_windspeed = params.ratedspeed
-    rated_power = params.ratedpower
-    depthBoundaries = params.depthBoundaries
-    gaus1D = params.gaus1D
-    gaus2D = params.gaus2D
-    centerIsShallow = params.gausDepthOutward
-    linDepth = params.linDepth
-    linDepthVariance = params.linDepthVariance
-    gausMaxDepth = params.gausMaxDepth
-    gausMinDepth = params.gausMinDepth
-    linStartDepth = params.linStartDepth
-    refCost = params.refLCOE
-    data = params.distribution
-    monopileModel = params.monopileCostModel
+"""
+    topfarm_monopile_cost(depth, refTCC, nturbines)
 
-    # extract x and y locations of turbines from design variables vector
-    turbinex = x[1:nturbines]
-    turbiney = x[nturbines+1:end]
+Calculates an estimated cost of a monopile at a given depth using Equation 7 in 'TOPFARM: Multi-fidelity optimization of wind farms'
+by  Réthoré et. al (2013)
 
-    xRange = depthBoundaries[1,2] - depthBoundaries[1,1]
-    yRange = depthBoundaries[2,2] - depthBoundaries[2,1]
-
-    cost = 0
-
-    for i = eachindex(turbinex)
-        if gaus2D
-            pos = [Int(ceil(1000*turbinex[i]))/1000, Int(ceil(1000*turbiney[i]))/1000]
-            depth = gaussianTwoD(distribution, gausMaxDepth, gausMinDepth, pos, centerIsShallow)
-        else
-            linearQuant = Int(ceil(1000*(turbiney[i] - depthBoundaries[2,1] + 0.0001)/yRange))/1000
-            gaussQuant = Int(ceil(1000*(turbinex[i] - depthBoundaries[1,1] + 0.0001)/xRange))/1000
-            distDepth = quantile(data, gaussQuant)[1]
-            difference = abs(gausMaxDepth - distDepth)
-            
-            depth = (gaus1D ? gaussianOneD(gausStartDepth, difference, gausDepthOutward) : 0)
-            depth = (linDepth ? depth + linearDepth(linDepthVariance, linStartDepth, linearQuant) : depth)
-        end
-        if monopileModel == "Linear"
-            latest = topfarm_monopile_cost(depth, refCost.TCC, nturbines)
-            cost += latest
-        else
-            latest = design_monopile(mean_windspeed, depth, rotordiameter[i], hub_height[i], rated_windspeed[i])
-            cost += latest / (rated_power[i]/1000) # Convert from USD to USD/kW for use in LCOE equation
-        end
-        #println("Latest:$latest Cost:$cost Depth:$depth mean_windspeed:$mean_windspeed")
-    end
-
-    return cost
-end
-
-# This function calculates the cost of a single monopile in a windfarm
-function topfarm_monopile_cost(depth, refTCC, nturbines)
-    # Using equation 7 from TOPFARM: Multi-fidelity optimization    
+# Arguments
+-'depth::Float': The water depth at the site in meters.
+-'refTCC::Float': Reference Turbine Capital Cost for the entire wind farm in $/kW
+-'nturbines::Int': The number of turbines in the wind farm.
+"""
+function topfarm_monopile_cost(depth, refTCC, nturbines)  
     # CTg = 2% of the total turbine cost, CTr = 20% of the total turbine cost 
     CTr = refTCC*0.2/nturbines
     CTg = refTCC*0.02/nturbines
     return CTr + CTg*(depth-8)
 end
 
+"""
+    design_monopile(mean_windspeed, site_depth, rotor_diameter, hub_height, rated_windspeed)
+
+Calculates the required monopile design at a given site and returns the associated cost. Uses the process described in 
+'10 Steps for Monopile Design' by Arany & Bhattacharya (2017) and used in NREL's  WISDEM package.
+
+# Arguments
+-'mean_windspeed::Float': The mean wind speed in the wind farm area over a year in meters/second.
+-'site_depth::Float': The water depth at the site of the wind turbine in meters.
+-'rotor_diameter::Float': The rotor diameter of the wind turbines in meters.
+-'hub_height::Float': The hub height of the wind turbine in meters.
+-'rated_windspeed::Float': The rated windspeed of the wind turbines in meters/second.
+"""
 function design_monopile(mean_windspeed, site_depth, rotor_diameter, hub_height, rated_windspeed)
     yield_stress = 355000000 # Pa 
     material_factor = 1.1
@@ -99,18 +62,40 @@ function design_monopile(mean_windspeed, site_depth, rotor_diameter, hub_height,
     return (design_cost + tp_cost)
 end
 
+"""
+    monopile_diameter(yield_stress, material_factor, M_50y)
+
+Calculates the required monopile diameter. Uses Equations 99 and 101 from from '10 Steps for Monopile Design' by Arany & Bhattacharya (2017).
+
+# Arguments
+-'yield_stress::Float': The yield stress of the monopile in Pascals.
+-'material_factor::Float': The material factor.
+-'M_50y::Float': The maximum moment on the monopile over a 50 year period in Newton-meters.
+"""
 function monopile_diameter(yield_stress, material_factor, M_50y)
-    # Equations for determining diameter, Eq 99 and 101
     A = (yield_stress * pi) / (4 * material_factor * M_50y)
     f(Dp) = A * ((0.99 * Dp - 0.00635) ^ 3) * (0.00635 + 0.01 * Dp) - Dp
 
+    # Find the root of equation f to identify a valid diameter.
     design_diameter = find_zero(f, 10)
 
     return design_diameter
 end
 
+"""
+    calculate_50year_wind_moment(mean_windspeed, site_depth, rotor_diameter, hub_height,rated_windspeed)
+
+Calculates the maximum moment on the monopile from the wind during a 50 year period. Uses Equation 30
+from '10 Steps for Monopile Design' by Arany & Bhattacharya (2017).
+
+# Arguments
+-'mean_windspeed::Float': The mean wind speed in the wind farm area over a year in meters/second.
+-'site_depth::Float': The water depth at the site of the wind turbine in meters.
+-'rotor_diameter::Float': The rotor diameter of the wind turbines in meters.
+-'hub_height::Float': The hub height of the wind turbine in meters.
+-'rated_windspeed::Float': The rated windspeed of the wind turbines in meters/second.
+"""
 function calculate_50year_wind_moment(mean_windspeed, site_depth, rotor_diameter, hub_height, rated_windspeed)
-    # Equation 30 from Arany & Bhattacharya (2017)
     load_factor = 3.375
     F_50y = calculate_50year_wind_load(mean_windspeed, rotor_diameter, rated_windspeed)
 
@@ -119,8 +104,18 @@ function calculate_50year_wind_moment(mean_windspeed, site_depth, rotor_diameter
     return M_50y * load_factor
 end
 
+"""
+    calculate_50year_wind_load(mean_windspeed, rotor_diameter, rated_windspeed)
+
+Calculates the maximum load on the monopile due to the wind over 50 years. Uses Equation 29
+from '10 Steps for Monopile Design' by Arany & Bhattacharya (2017).
+
+# Arguments
+-'mean_windspeed::Float': The mean wind speed in the wind farm area over a year in meters/second.
+-'rotor_diameter::Float': The rotor diameter of the wind turbines in meters.
+-'rated_windspeed::Float': The rated windspeed of the wind turbines in meters/second.
+"""
 function calculate_50year_wind_load(mean_windspeed, rotor_diameter, rated_windspeed)
-    # Equation 29 from Arany & Bhattacharya (2017)
     air_density = 1.225
     swept_area = pi * (rotor_diameter / 2)^2
 
@@ -133,14 +128,31 @@ function calculate_50year_wind_load(mean_windspeed, rotor_diameter, rated_windsp
     return F_50y
 end
 
+"""
+    calculate_thrust_coefficient(rated_windspeed)
+
+Calculates the thrust coefficient of the wind turbines.
+
+# Arguments
+-'rated_windspeed::Float': The rated wind speed of the turbines in the wind farm in meters/second.
+"""
 function calculate_thrust_coefficient(rated_windspeed)
     ct = min(3.5 * (2 * rated_windspeed + 3.5) / (rated_windspeed^2), 1)
 
     return ct
 end
 
+"""
+    pile_embedment_length(Mp)
+
+Calculates the embedment length of the monopile using equation 7 from '10 Steps for Monopile Design'
+by Arany & Bhattacharya (2017). Uses assumed values for the monopile's modulus of elasticity and 
+soil coefficient.
+
+# Arguments:
+-'Mp::Float': Moment of the monopile in Newton-meters.
+"""
 function pile_embedment_length(Mp)
-    # Uses eq 7
     # TODO: Add inputs for main COE file and variables in params to specify monopile
     # modulus, soil coefficient, and other variables (cost of steel, etc)
     monopile_modulus = 200e9 # Pa
@@ -151,9 +163,18 @@ function pile_embedment_length(Mp)
     return Length
 end
 
-function calculate_50year_extreme_gust(mean_windspeed, rotor_diameter, rated_windspeed)
-    # Equation 28 
+"""
+    calculate_50year_extreme_gust(mean_windspeed, rotor_diameter, rated_windspeed)
 
+Calculates the estimated extreme wind gust over 50 years. Uses Equation 28
+from '10 Steps for Monopile Design' by Arany & Bhattacharya (2017).
+
+# Abstract
+-'mean_windspeed::Float': The mean wind speed in the wind farm area over a year in meters/second.
+-'rotor_diameter::Float': The rotor diameter of the wind turbines in meters.
+-'rated_windspeed::Float': The rated windspeed of the wind turbines in meters/second.
+"""
+function calculate_50year_extreme_gust(mean_windspeed, rotor_diameter, rated_windspeed)
     length_scale = 340.2
 
     U_50y = calculate_50year_extreme_ws(mean_windspeed)
@@ -167,8 +188,16 @@ function calculate_50year_extreme_gust(mean_windspeed, rotor_diameter, rated_win
     return U_eog
 end
 
+"""
+    calculate_50year_extreme_ws(mean_windspeed)
+
+Calculates the estimated extreme wind speed over 50 years. Uses Equation 27
+from '10 Steps for Monopile Design' by Arany & Bhattacharya (2017).
+
+# Abstract
+-'mean_windspeed::Float': The mean wind speed in the wind farm area over a year in meters/second.
+"""
 function calculate_50year_extreme_ws(mean_windspeed)
-    # Equation 27
     scale_factor = mean_windspeed
     shape_factor = 2
     U_50y = scale_factor * (-log(1 - 0.98 ^ (1 / 52596))) ^ (1 / shape_factor)
@@ -176,91 +205,51 @@ function calculate_50year_extreme_ws(mean_windspeed)
     return U_50y
 end
 
+"""
+    monopile_mass(D, t, L)
+
+Calculates the mass of a monopile in US tons. Assumes the density of the monopile steel is 7,860 kg/m^3
+
+# Arguments
+-'D::Float': Diameter of the monopile in meters
+-'t::Float': Thickness of the monopile in meters
+-'L::Float': Length of the monopile in meters
+"""
 function monopile_mass(D, t, L)
     # Line 328 of monopile_design.py in WISDEM from NREL
     density = 7860 # kg/m3
     volume = (pi / 4) * (D^2 - (D - t)^2) * L
-    mass = density * volume / 907.185 # Why 907.185
+    mass = density * volume / 907.185 # convert the mass to tons
 
-    return mass
+    return mass # In tons
 end
 
+"""
+    monopile_thickness(D)
+
+Calculates the thickness of a monopile using Equation 1 from '10 Steps for Monopile Design'
+by Arany & Bhattacharya (2017)
+
+# Arguments
+-'D::Float': Diameter of monopile in meters
+"""
 function monopile_thickness(D)
-    # Equation 1 from Arany & Bhattacharya (2017) 10 steps for monopile design
     thickness = 0.00635 + D/100
 
     return thickness
 end
 
+"""
+    calculate_pile_moment(D, t)
+
+Calculates the moment on a monopile of a given diameter and thickness
+
+# Arguments
+-'D::Float': Diameter of monopile in meters
+-'t::Float': Thickness of monopile in meters
+"""
 function calculate_pile_moment(D, t)
     Ip = 0.125 * ((D - t)^3) * t * pi
 
     return Ip
-end
-
-@testset "50 year extreme Wind Speed" begin
-    @test calculate_50year_extreme_ws(9.74) == 37.43548973876968
-    @test calculate_50year_extreme_ws(7) == 26.904356075091144
-    @test calculate_50year_extreme_ws(8) == 30.74783551438988
-end
-
-@testset "50 year extreme Wind Gust" begin
-    @test calculate_50year_extreme_gust(9.74, 125, 11.4) == 8.401646451820062
-    @test calculate_50year_extreme_gust(7, 125, 11.4) == 6.038144267221809
-    @test calculate_50year_extreme_gust(7, 100, 11.4) == 6.325538092410854
-    @test calculate_50year_extreme_gust(7, 125, 10) == 6.038144267221809
-end
-
-@testset "Thrust Coefficient" begin
-    @test calculate_thrust_coefficient(11.4) == 0.7082948599569098
-    @test calculate_thrust_coefficient(7) == 1
-    @test calculate_thrust_coefficient(8) == 1
-    @test calculate_thrust_coefficient(10) == 0.8225
-end
-
-@testset "50 year Wind Load" begin
-    @test calculate_50year_wind_load(9.74, 125, 11.4) == 2087529.8529107259
-    @test calculate_50year_wind_load(7, 125, 11.4) == 1618939.5140525973
-    @test calculate_50year_wind_load(7, 100, 11.4) == 1070554.8426587582
-    @test calculate_50year_wind_load(7, 125, 10) == 1590230.7187345193
-end
-
-@testset "50 year Wind Moment" begin
-    @test calculate_50year_wind_moment(9.74, 23.5, 125, 90, 11.4) == 799654404.2806149
-    @test calculate_50year_wind_moment(7, 23.5, 125, 90, 11.4) == 620155017.6017731
-    @test calculate_50year_wind_moment(8, 26, 125, 90, 10) == 691345156.9397321
-    @test calculate_50year_wind_moment(8, 30, 125, 80, 11.4) == 661962945.240009
-end
-
-@testset "Monopile Diameter" begin
-    @test isapprox(monopile_diameter(355000000, 1.1, 799654404.2806149), 6.677656219964458; atol = 0.001)
-    @test isapprox(monopile_diameter(355000000, 1.1, 620155017.6017731), 6.119550254228244; atol = 0.001)
-    @test isapprox(monopile_diameter(355000000, 1.1, 691345156.9397321), 6.352343360869822; atol = 0.001)
-    @test isapprox(monopile_diameter(355000000, 1.1, 661962945.240009), 6.25829318500689; atol = 0.001)
-end
-
-@testset "Monopile Thickness" begin
-    @test isapprox(monopile_thickness(6.677656219964458), 0.07312656219964457; 0.001)
-    @test isapprox(monopile_thickness(5), 0.056350000000000004; 0.001)
-    @test isapprox(monopile_thickness(7), 0.07635; 0.001)
-    @test isapprox(monopile_thickness(6.119550254228244), 0.06754550254228243; 0.001)
-end
-
-@testset "Monopile Moment" begin
-    @test isapprox(calculate_pile_moment(6.677656219964458, 0.07312656219964457), 8.27295623552583; 0.001)
-    @test isapprox(calculate_pile_moment(5, 0.056350000000000004), 2.6736032113211996; 0.001)
-    @test isapprox(calculate_pile_moment(7, 0.07635), 9.95117225211555; 0.001)
-    @test isapprox(calculate_pile_moment(6.119550254228244, 0.06754550254228243), 5.879685598856954; 0.001)
-end
-
-@testset "Embedment Length" begin
-    @test isapprox(pile_embedment_length(8.27295623552583), 26.56783356260234; 0.001)
-    @test isapprox(pile_embedment_length(2.6736032113211996), 21.195486401869456; 0.001)
-    @test isapprox(pile_embedment_length(9.95117225211555), 27.567592805981995; 0.001)
-    @test isapprox(pile_embedment_length(5.879685598856954), 24.813887979958285; 0.001)
-end
-
-@testset "Monopile Mass" begin
-    @test isapprox(monopile_mass(6.677656219964458, 0.07312656219964457, (23.5+10+26.56783356260234)), 397.01164557176816; 0.001)
-    @test isapprox(monopile_mass(6.119550254228244, 0.06754550254228243, (23.5+10+24.813887979958285)), 326.2353875559374; 0.001)
 end

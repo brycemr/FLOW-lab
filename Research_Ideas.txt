@@ -1,0 +1,17 @@
+Follow a similar procedure to that in 'Optimization of Wind Turbine Interconnections in an Offshore Wind Farm Using Metaheuristic Algorithms',
+but add more constraints, and improved cost models. Could also experiment with using different Metaheuristic Algorithms to improve runtime
+or supported number of turbines.
+
+Work on the obstacles/no turbine zones problem. (Maybe have a growing space where turbines cannot be placed, slowly moving the turbines 
+on either side). This could also apply to the fly through zone, you create a x-width no turbine zone that goes through entire area. Test this 
+in 180 degrees. (Need to know more about that constraint, is there already a specified path, or does there just need to be one through the middle,
+could it be through just a corner?)
+
+Look at just substation optimization or just cable topology optimization using a number of different Metaheuristic algorithms to compare runtime
+
+Build functions that work with my optimizer for other foundations that can be specified (twisted jacket, gravity, floating).
+
+QUESTIONS FOR JAMES || DR NING
+Should I be prepping my code to add it to FLOW FARM? 
+Should I be preparing a paper?
+Who are the stakeholders of my work? 

@@ -224,6 +224,64 @@ function spacing_wrapper(x, params)
     return constraintscalespacing.*(minimumspacing .- ff.turbine_spacing(turbinex, turbiney))
 end
 
+function total_monopile_cost_wrapper(x, params)
+    cost = 0
+    
+    nturbines = Int(length(x)/2)
+    
+    mean_windspeed = params.meanWindspeed
+    rotordiameter = params.rotordiameter
+    hub_height = params.hubheight
+    rated_windspeed = params.ratedspeed
+    rated_power = params.ratedpower
+    depthBoundaries = params.depthBoundaries
+    gaus1D = params.gaus1D
+    gaus2D = params.gaus2D
+    centerIsShallow = params.gausDepthOutward
+    linDepth = params.linDepth
+    linDepthVariance = params.linDepthVariance
+    gausMaxDepth = params.gausMaxDepth
+    gausMinDepth = params.gausMinDepth
+    linStartDepth = params.linStartDepth
+    refCost = params.refLCOE
+    data = params.distribution
+    monopileModel = params.monopileCostModel
+
+    # extract x and y locations of turbines from design variables vector
+    turbinex = x[1:nturbines]
+    turbiney = x[nturbines+1:end]
+
+    xRange = depthBoundaries[1,2] - depthBoundaries[1,1]
+    yRange = depthBoundaries[2,2] - depthBoundaries[2,1]
+
+    cost = 0
+
+    for i = eachindex(turbinex)
+        if gaus2D
+            pos = [Int(ceil(1000*turbinex[i]))/1000, Int(ceil(1000*turbiney[i]))/1000]
+            depth = gaussianTwoD(distribution, gausMaxDepth, gausMinDepth, pos, centerIsShallow)
+        else
+            linearQuant = Int(ceil(1000*(turbiney[i] - depthBoundaries[2,1] + 0.0001)/yRange))/1000
+            gaussQuant = Int(ceil(1000*(turbinex[i] - depthBoundaries[1,1] + 0.0001)/xRange))/1000
+            distDepth = quantile(data, gaussQuant)[1]
+            difference = abs(gausMaxDepth - distDepth)
+            
+            depth = (gaus1D ? gaussianOneD(gausStartDepth, difference, gausDepthOutward) : 0)
+            depth = (linDepth ? depth + linearDepth(linDepthVariance, linStartDepth, linearQuant) : depth)
+        end
+        if monopileModel == "Linear"
+            latest = topfarm_monopile_cost(depth, refCost.TCC, nturbines)
+            cost += latest
+        else
+            latest = design_monopile(mean_windspeed, depth, rotordiameter[i], hub_height[i], rated_windspeed[i])
+            cost += latest / (rated_power[i]/1000) # Convert from USD to USD/kW for use in LCOE equation
+        end
+        
+    end
+
+    return cost
+end
+
 # Set up the aep wrapper function
 function coe_wrapper(x, params)
     turbinez = params.turbinez
