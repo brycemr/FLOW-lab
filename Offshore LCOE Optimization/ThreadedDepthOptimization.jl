@@ -4,6 +4,7 @@ using VectorizedRoutines.Matlab: meshgrid
 using SNOW
 using Plots
 using Distributions
+using Base.Threads
 
 include("Depths.jl")
 include("Monopile.jl")
@@ -16,12 +17,12 @@ boundary_normals = [-1 0; 0 -1; 1 0; 0 1]
 
 #--------- SET DEPTH SETTINGS -------------#
 
-gaus1D = true
+gaus1D = false
 gaus2D = false
 gausDepthOutward = true
-linDepth = false
+linDepth = true
 mean_depth = 25
-variance = mean_depth*1.6
+variance = mean_depth*1.0
 
 # gausMinDepth = mean_depth - variance/2
 # gausMaxDepth = mean_depth + variance/2
@@ -53,8 +54,8 @@ turbinex .+= rand.((-900:900, ))
 turbiney .+= rand.((-900:900, ))
 
 # Data for best layout found after 1000 iterations at constant depth
-coe_turbinex = [-514.6762343236603, -899.0423356094258, 899.0535661587471, 191.22553663556835, -215.85037827121627, 500.17226124843137, 899.9897142664346, -710.1414926990467, 701.9381655440102]
-coe_turbiney = [-517.9729989480674, 895.6549046147234, 898.3391430011374, -729.2736923256954, 703.9434254556588, 493.99924385540584, -899.1640352528848, 179.39357995133125, -210.91116032028395]
+coe_turbinex = [-899.9956405058426, -332.9596947879411, 465.4443740804267, 899.9969636019474, -709.7076348521882, 682.9807369271535, 93.11738628905341, -116.96792443519023, 899.9968332444602]
+coe_turbiney = [-315.2302547057816, -899.9959178426001, -722.0066513007954, -861.8796966667369, 506.32757214481273, 100.85076789245387, 707.2239100016805, -106.32890031624925, 899.9945103412992]
 
 # turbinex = [-500.0, -500.0, -500.0, 0.0, 0.0, 0.0, 500.0, 500.0, 500.0]
 # turbiney = [-500.0, 0.0, 500.0, -500.0, 0.0, 500.0, -500.0, 0.0, 500.0]
@@ -417,7 +418,7 @@ obj_func!(g, x) = wind_farm_opt!(g, x, params)
 # ------------SETUP THE OPTIMIZER --------------------------------------
 
 # initialize design variable vector
-best_coe = coe_initial;
+best_coe = Threads.Atomic{Float64}(coe_initial)
 best_layout = [copy(turbinex); copy(turbiney)]
 best_opt = [copy(turbinex); copy(turbiney)]
 # set general lower and upper bounds for design variable
@@ -459,15 +460,20 @@ options = Options(solver=solver, derivatives=ForwardAD())
 
 # println("Finished in : ", clk, " (s)")
 # println("info: ", info)
+numIterations = 10
+coe_results = ones(nthreads()).*10000.0
+load_distribution = zeros(nthreads())
+layout_results = [Array{Float64}(undef, nturbines) for _ in 1:nthreads()]
+print(coe_results)
+print(layout_results)
 
-for i = 1:500
-    global best_coe
+t1 = time()
+Threads.@threads for i in 1:50
     global lx
     global ux
     global ng
     global lg
     global ug
-    global best_opt
     global nturbines
     local turbinex = zeros(nturbines)
     local turbiney = zeros(nturbines)
@@ -488,53 +494,49 @@ for i = 1:500
     local fopt
     local info
     global out
+    t3 = time()
     xopt, fopt, info, out = minimize(obj_func!, x0, ng, lx, ux, lg, ug, options)
-
-
+    t4 = time()
+    load_distribution[threadid()] += t4 - t3
     local coefinal = fopt/objectivescale
-    if coefinal < best_coe
-        best_coe = coefinal
-        best_opt = xopt
+    if coefinal < coe_results[threadid()]
+        coe_results[threadid()] = coefinal
+        layout_results[threadid()] = xopt
     end
-    
-    println("BSSF: $best_coe")
-    println("BLSF: ", best_opt)
-    println("TOTAL SOLUTIONS: $i")
+    println("TOTAL SOLUTIONS: $i Time: ", t4 - t3)
 end
 
-# print("Init LCOE WITHOUT Monopiles: ")
-# println(ff.cost_of_energy(rotordiameter, hubheight, coe_ratedpower, coe_aep, refLCOE), " \$/MWh")
-# println("Init LCOE of Monopiles: ", monopilesCost*refLCOE.FCR/(coe_aep/1000), " \$/MWh")
-# println("Final LCOE of Monopiles: ", total_monopile_cost_wrapper(xopt, params)*refLCOE.FCR/(coe_aep/1000), " \$/Mwh" )
-# println("Initial COE: ", coe_initial, " \$/MWh")
-# println("Final COE: ", coefinal, " \$/MWh")
-# println("COE improvement (%) = ", -100*(coefinal - coe_initial)/coe_initial)
+t2 = time()
+println("Time: ", t2 - t1)
+println("Time distribution: ", load_distribution)
+# println(coe_results)
+# println(layout_results)
+
+# Identify the best LCOE and associated layout found
+best_coe = coe_results[1]
+best_layout = layout_results[1]
+for i = 2:nthreads()
+    global best_coe
+    global best_layout
+    if coe_results[i] < best_coe
+        best_coe = coe_results[i]
+        best_layout = layout_results[i]
+    end
+end
 
 println("BEST LCOE: $best_coe")
+println("BEST OPT: ", best_layout)
 
 # final turbine locations
-turbinexopt = copy(best_opt[1:nturbines])
-turbineyopt = copy(best_opt[nturbines+1:end])
+turbinexopt = copy(best_layout[1:nturbines])
+turbineyopt = copy(best_layout[nturbines+1:end])
 
-currPos = [copy(coe_turbinex);copy(coe_turbiney)]
-monopilesCost = total_monopile_cost_wrapper(currPos, params)
-cost = ff.Levelized(refLCOE.TCC+monopilesCost, refLCOE.BOS, refLCOE.FC,
-    refLCOE.FCR, refLCOE.OpEx)    
 
-total_ratedpower = sum(ratedpower)
-new_aep = ff.calculate_aep(coe_turbinex, coe_turbiney, turbinez, rotordiameter,
-    hubheight, turbineyaw, ctmodels, generatorefficiency, cutinspeed,
-    cutoutspeed, ratedspeed, ratedpower, windresource, powermodels,
-    modelset, rotor_sample_points_y=rotorsamplepointsy, 
-    rotor_sample_points_z=rotorsamplepointsz)
-base_aep = new_aep/total_ratedpower # For the LCOE equation we need aep in MWh/MW/year not Wh/year (same as hr/year)
-coe_ratedpower = ratedpower./1000 # needs to be in units of kw
-base_coe = ff.cost_of_energy(rotordiameter, hubheight, coe_ratedpower, base_aep, cost)
+println()
+println()
+println(coe_results)
+println(layout_results)
 
-improvement = (-100*(best_coe - base_coe)/base_coe)
-
-println("Base COE: $base_coe")
-println("Improvement: $improvement")
 
 #-----PLOT OPTIMIZED LAYOUT------------#
 fig, ax = plt.subplots(1)

@@ -8,9 +8,9 @@ Calculates an estimated cost of a monopile at a given depth using Equation 7 in 
 by  Réthoré et. al (2013)
 
 # Arguments
--'depth::Float': The water depth at the site in meters.
--'refTCC::Float': Reference Turbine Capital Cost for the entire wind farm in $/kW
--'nturbines::Int': The number of turbines in the wind farm.
+-`depth::Float`: The water depth at the site in meters.
+-`refTCC::Float`: Reference Turbine Capital Cost for the entire wind farm in USD/kW
+-`nturbines::Int`: The number of turbines in the wind farm.
 """
 function topfarm_monopile_cost(depth, refTCC, nturbines)  
     # CTg = 2% of the total turbine cost, CTr = 20% of the total turbine cost 
@@ -26,11 +26,11 @@ Calculates the required monopile design at a given site and returns the associat
 '10 Steps for Monopile Design' by Arany & Bhattacharya (2017) and used in NREL's  WISDEM package.
 
 # Arguments
--'mean_windspeed::Float': The mean wind speed in the wind farm area over a year in meters/second.
--'site_depth::Float': The water depth at the site of the wind turbine in meters.
--'rotor_diameter::Float': The rotor diameter of the wind turbines in meters.
--'hub_height::Float': The hub height of the wind turbine in meters.
--'rated_windspeed::Float': The rated windspeed of the wind turbines in meters/second.
+-`mean_windspeed::Float`: The mean wind speed in the wind farm area over a year in meters/second.
+-`site_depth::Float`: The water depth at the site of the wind turbine in meters.
+-`rotor_diameter::Float`: The rotor diameter of the wind turbines in meters.
+-`hub_height::Float`: The hub height of the wind turbine in meters.
+-`rated_windspeed::Float`: The rated windspeed of the wind turbines in meters/second.
 """
 function design_monopile(mean_windspeed, site_depth, rotor_diameter, hub_height, rated_windspeed)
     yield_stress = 355000000 # Pa 
@@ -68,9 +68,9 @@ end
 Calculates the required monopile diameter. Uses Equations 99 and 101 from from '10 Steps for Monopile Design' by Arany & Bhattacharya (2017).
 
 # Arguments
--'yield_stress::Float': The yield stress of the monopile in Pascals.
--'material_factor::Float': The material factor.
--'M_50y::Float': The maximum moment on the monopile over a 50 year period in Newton-meters.
+-`yield_stress::Float`: The yield stress of the monopile in Pascals.
+-`material_factor::Float`: The material factor.
+-`M_50y::Float`: The maximum moment on the monopile over a 50 year period in Newton-meters.
 """
 function monopile_diameter(yield_stress, material_factor, M_50y)
     A = (yield_stress * pi) / (4 * material_factor * M_50y)
@@ -89,11 +89,11 @@ Calculates the maximum moment on the monopile from the wind during a 50 year per
 from '10 Steps for Monopile Design' by Arany & Bhattacharya (2017).
 
 # Arguments
--'mean_windspeed::Float': The mean wind speed in the wind farm area over a year in meters/second.
--'site_depth::Float': The water depth at the site of the wind turbine in meters.
--'rotor_diameter::Float': The rotor diameter of the wind turbines in meters.
--'hub_height::Float': The hub height of the wind turbine in meters.
--'rated_windspeed::Float': The rated windspeed of the wind turbines in meters/second.
+-`mean_windspeed::Float`: The mean wind speed in the wind farm area over a year in meters/second.
+-`site_depth::Float`: The water depth at the site of the wind turbine in meters.
+-`rotor_diameter::Float`: The rotor diameter of the wind turbines in meters.
+-`hub_height::Float`: The hub height of the wind turbine in meters.
+-`rated_windspeed::Float`: The rated windspeed of the wind turbines in meters/second.
 """
 function calculate_50year_wind_moment(mean_windspeed, site_depth, rotor_diameter, hub_height, rated_windspeed)
     load_factor = 3.375
@@ -111,9 +111,9 @@ Calculates the maximum load on the monopile due to the wind over 50 years. Uses 
 from '10 Steps for Monopile Design' by Arany & Bhattacharya (2017).
 
 # Arguments
--'mean_windspeed::Float': The mean wind speed in the wind farm area over a year in meters/second.
--'rotor_diameter::Float': The rotor diameter of the wind turbines in meters.
--'rated_windspeed::Float': The rated windspeed of the wind turbines in meters/second.
+-`mean_windspeed::Float`: The mean wind speed in the wind farm area over a year in meters/second.
+-`rotor_diameter::Float`: The rotor diameter of the wind turbines in meters.
+-`rated_windspeed::Float`: The rated windspeed of the wind turbines in meters/second.
 """
 function calculate_50year_wind_load(mean_windspeed, rotor_diameter, rated_windspeed)
     air_density = 1.225
@@ -134,7 +134,7 @@ end
 Calculates the thrust coefficient of the wind turbines.
 
 # Arguments
--'rated_windspeed::Float': The rated wind speed of the turbines in the wind farm in meters/second.
+-`rated_windspeed::Float`: The rated wind speed of the turbines in the wind farm in meters/second.
 """
 function calculate_thrust_coefficient(rated_windspeed)
     ct = min(3.5 * (2 * rated_windspeed + 3.5) / (rated_windspeed^2), 1)
@@ -150,7 +150,7 @@ by Arany & Bhattacharya (2017). Uses assumed values for the monopile's modulus o
 soil coefficient.
 
 # Arguments:
--'Mp::Float': Moment of the monopile in Newton-meters.
+-`Mp::Float`: Moment of the monopile in Newton-meters.
 """
 function pile_embedment_length(Mp)
     # TODO: Add inputs for main COE file and variables in params to specify monopile
@@ -170,9 +170,9 @@ Calculates the estimated extreme wind gust over 50 years. Uses Equation 28
 from '10 Steps for Monopile Design' by Arany & Bhattacharya (2017).
 
 # Abstract
--'mean_windspeed::Float': The mean wind speed in the wind farm area over a year in meters/second.
--'rotor_diameter::Float': The rotor diameter of the wind turbines in meters.
--'rated_windspeed::Float': The rated windspeed of the wind turbines in meters/second.
+-`mean_windspeed::Float`: The mean wind speed in the wind farm area over a year in meters/second.
+-`rotor_diameter::Float`: The rotor diameter of the wind turbines in meters.
+-`rated_windspeed::Float`: The rated windspeed of the wind turbines in meters/second.
 """
 function calculate_50year_extreme_gust(mean_windspeed, rotor_diameter, rated_windspeed)
     length_scale = 340.2
@@ -195,7 +195,7 @@ Calculates the estimated extreme wind speed over 50 years. Uses Equation 27
 from '10 Steps for Monopile Design' by Arany & Bhattacharya (2017).
 
 # Abstract
--'mean_windspeed::Float': The mean wind speed in the wind farm area over a year in meters/second.
+-`mean_windspeed::Float`: The mean wind speed in the wind farm area over a year in meters/second.
 """
 function calculate_50year_extreme_ws(mean_windspeed)
     scale_factor = mean_windspeed
@@ -211,9 +211,9 @@ end
 Calculates the mass of a monopile in US tons. Assumes the density of the monopile steel is 7,860 kg/m^3
 
 # Arguments
--'D::Float': Diameter of the monopile in meters
--'t::Float': Thickness of the monopile in meters
--'L::Float': Length of the monopile in meters
+-`D::Float`: Diameter of the monopile in meters
+-`t::Float`: Thickness of the monopile in meters
+-`L::Float`: Length of the monopile in meters
 """
 function monopile_mass(D, t, L)
     # Line 328 of monopile_design.py in WISDEM from NREL
@@ -231,7 +231,7 @@ Calculates the thickness of a monopile using Equation 1 from '10 Steps for Monop
 by Arany & Bhattacharya (2017)
 
 # Arguments
--'D::Float': Diameter of monopile in meters
+-`D::Float`: Diameter of monopile in meters
 """
 function monopile_thickness(D)
     thickness = 0.00635 + D/100
@@ -245,8 +245,8 @@ end
 Calculates the moment on a monopile of a given diameter and thickness
 
 # Arguments
--'D::Float': Diameter of monopile in meters
--'t::Float': Thickness of monopile in meters
+-`D::Float`: Diameter of monopile in meters
+-`t::Float`: Thickness of monopile in meters
 """
 function calculate_pile_moment(D, t)
     Ip = 0.125 * ((D - t)^3) * t * pi

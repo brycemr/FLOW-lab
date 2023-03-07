@@ -1,6 +1,17 @@
-TODO:
-Add docstrings to functions in Monopile.jl and Depths.jl
+The wind rose data has a large effect on the final layout. Even just the number of discrete directions. This makes sense as it will only
+look for wake interference in those directions.
 
-Add comments to COE wrapper and CoeDepthOptimization.jl
+Modify the depth functions to make it easier to understand the result.
 
-Fix all the julia 'problems' listed
+The mean depth appears to affect the layout variance more than the difference in depth (For Linear Layout)
+
+
+Possible Plots:
+For 1D Linear and 1D Gaussian
+Mean Depth vs Mean Distance Diff (Const Variance as % and Const Variance as number)
+Variance (plotted as percent of mean depth) vs Mean Dist Diff (Const Mean Depth, try different kinds)
+
+For 1D Combined
+
+
+For 2D

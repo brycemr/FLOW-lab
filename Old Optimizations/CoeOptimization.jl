@@ -4,10 +4,14 @@ using VectorizedRoutines.Matlab: meshgrid
 using SNOW
 using Plots
 
-turbinex = [-240.0, -240.0, -240.0, 0.0, 0.0, 0.0, 240.0, 240.0, 240.0]
-turbiney = [-240.0, 0.0, 240.0, -240.0, 0.0, 240.0, -240.0, 0.0, 240.0]
+turbinex = [-500.0, -500.0, -500.0, 0.0, 0.0, 0.0, 500.0, 500.0, 500.0]
+turbiney = [-500.0, 0.0, 500.0, -500.0, 0.0, 500.0, -500.0, 0.0, 500.0]
 #turbiney = [0.0, 0.0, 0.0]
 #turbinex = [-240.0, 0, 240]
+#turbinex = [-500.0, -500.0, -500.0, -500.0, -500.0, -250.0, -250.0, -250.0, -250.0, -250.0, 0.0, 0.0, 0.0, 0.0, 0.0, 250.0, 250.0, 250.0, 250.0, 250.0, 500.0, 500.0, 500.0, 500.0, 500.0]
+#turbiney = [-500.0, -250.0, 0.0, 250.0, 500.0, -500.0, -250.0, 0.0, 250.0, 500.0, -500.0, -250.0, 0.0, 250.0, 500.0, -500.0, -250.0, 0.0, 250.0, 500.0, -500.0, -250.0, 0.0, 250.0, 500.0]
+
+
 # INITIAL TURBINE LOCATIONS
 
 nturbines = length(turbinex)
@@ -18,16 +22,18 @@ turbineyaw = zeros(nturbines)
 
 # set wind farm boundary parameters in meters
 boundarycenter = [0.0, 0.0]
-boundaryradius = hypot(300,300)
-boundaryVertices = [-400 -400 400 400; -400 400 400 -400]
+boundaryradius = 900
+
+boundary_vertices = [-boundaryradius -boundaryradius; boundaryradius -boundaryradius; boundaryradius boundaryradius; -boundaryradius boundaryradius]
+boundary_normals = [-1 0; 0 -1; 1 0; 0 1]
 
 # set wind turbine design parameters
-rotordiameter = zeros(nturbines) .+ 80.0 # m 
-hubheight = zeros(nturbines) .+ 70      # m
-cutinspeed = zeros(nturbines) .+ 4.0    # m/s
+rotordiameter = zeros(nturbines) .+ 125 # m 
+hubheight = zeros(nturbines) .+ 90      # m
+cutinspeed = zeros(nturbines) .+ 3.0    # m/s
 cutoutspeed = zeros(nturbines) .+ 25.0   # m/s 
-ratedspeed = zeros(nturbines) .+ 16.0   # m/s 
-ratedpower = zeros(nturbines) .+ 2.8E6  # W
+ratedspeed = zeros(nturbines) .+ 11.4   # m/s 
+ratedpower = zeros(nturbines) .+ 5.0E6  # W (5 MW)
 generatorefficiency = ones(nturbines)
 
 # VISUALIZING THE WIND FARM LAYOUT
@@ -40,7 +46,8 @@ ff.plotlayout!(ax, turbinex, turbiney, rotordiameter)
 ax.set(xlabel="Easting (m)", ylabel="Northing (m)")
 
 #circle = matplotlib.patches.Circle((0.0, 0.0), boundaryradius, fill=false, color="k")
-#ax.add_patch(circle)
+square = matplotlib.patches.Rectangle((-1000.0, -1000.0), 2000, 2000, fill=false, color="k")
+ax.add_patch(square)
 
 ax.set(xlim=[-boundaryradius, boundaryradius].*1.01, ylim=[-boundaryradius, boundaryradius].*1.01)
 
@@ -50,15 +57,16 @@ display(fig)
 nsamplepoints = 50
 rotorsamplepointsy, rotorsamplepointsz = ff.rotor_sample_points(nsamplepoints, method="sunflower")
 
-# SETUP WIND RESOURCE
-windspeed = 8.0 # m/s 
+#--------- SETUP WIND RESOURCE ----------#
+windspeed = 9.74 # m/s 
 airdensity = 1.1716 # kg/m^3
 ambientti = 0.1 # %
-shearexponent = 0.15
-ndirections = 5
+shearexponent = 0.12
+ndirections = 12
 winddirections = collect(range(0, 2*pi*(1-1/ndirections), length=ndirections))
 windspeeds = ones(ndirections).*windspeed
-windprobabilities = ones(ndirections).*(1.0/ndirections)
+#windprobabilities = ones(ndirections).*(1.0/ndirections)
+windprobabilities = [8, 9, 7, 3, 2, 5, 9, 12, 16, 12, 10, 7] ./100
 ambienttis = ones(ndirections).*ambientti
 measurementheight = ones(ndirections).*hubheight[1]
 
@@ -103,10 +111,16 @@ aep = ff.calculate_aep(turbinex, turbiney, turbinez, rotordiameter,
     rotor_sample_points_z=rotorsamplepointsz)
 
 
+refTCC = 1952.0
+refBOS = 4420 + 474.0
+refFC = 672.0  # $/kW
+refFCR = 0.0764 # /year
+refCapEx = 140.56
+cost = ff.Levelized(refTCC, refBOS, refFC, refFCR, refCapEx)
 total_ratedpower = sum(ratedpower)
 coe_aep = aep/total_ratedpower # For the LCOE equation we need aep in MWh/MW/year not Wh/year (same as hr/year)
 coe_ratedpower = ratedpower./1000 # needs to be in units of kw
-coe = ff.cost_of_energy(rotordiameter, hubheight, coe_ratedpower, coe_aep, ff.Levelized())
+coe = ff.cost_of_energy(rotordiameter, hubheight, coe_ratedpower, coe_aep, cost)
 
 println("$aep Watt-hours per year")
 # AEP in each direction
@@ -130,10 +144,10 @@ constraintscaleboundary = 1.0E-3
 constraintscalespacing = 1.0
 
 # set the minimum spacing between turbines 
-minimumspacing = 100
+minimumspacing = 125*1.2
 
 # set up a struct for use in optimization functions, these are the non-differentiated parameters
-mutable struct params_struct3{}
+mutable struct params_struct4{}
     modelset
     rotorsamplepointsy
     rotorsamplepointsz
@@ -142,6 +156,8 @@ mutable struct params_struct3{}
     rotordiameter
     boundarycenter
     boundaryradius
+    boundary_vertices
+    boundary_normals
     objectivescale
     constraintscaleboundary
     constraintscalespacing
@@ -158,8 +174,8 @@ mutable struct params_struct3{}
     powermodels
 end
 
-params = params_struct3(modelset, rotorsamplepointsy, rotorsamplepointsz, turbinez, ambientti,
-    rotordiameter, boundarycenter, boundaryradius, objectivescale, constraintscaleboundary,
+params = params_struct4(modelset, rotorsamplepointsy, rotorsamplepointsz, turbinez, ambientti,
+    rotordiameter, boundarycenter, boundaryradius, boundary_vertices, boundary_normals, objectivescale, constraintscaleboundary,
     constraintscalespacing, minimumspacing, hubheight, turbineyaw,
     ctmodels, generatorefficiency, cutinspeed, cutoutspeed, ratedspeed, ratedpower,
     windresource, powermodels)
@@ -169,6 +185,8 @@ function boundary_wrapper(x, params)
     # include the relevant params
     boundarycenter = params.boundarycenter
     boundaryradius = params.boundaryradius
+    boundary_vertices = params.boundary_vertices
+    boundary_normals = params.boundary_normals
     constraintscaleboundary = params.constraintscaleboundary
 
     nturbines = Int(length(x)/2)
@@ -178,7 +196,8 @@ function boundary_wrapper(x, params)
     turbiney = x[nturbines+1:end]
 
     # get and return boundary distances
-    return ff.circle_boundary(boundarycenter, boundaryradius, turbinex, turbiney).*constraintscaleboundary
+    #return ff.circle_boundary(boundarycenter, boundaryradius, turbinex, turbiney).*constraintscaleboundary
+    return ff.convex_boundary(boundary_vertices, boundary_normals, turbinex, turbiney).*constraintscaleboundary
 end
 
 # Set up spacing constraint wrapper function
@@ -194,27 +213,6 @@ function spacing_wrapper(x, params)
     turbiney = x[nturbines+1:end]
 
     return constraintscalespacing.*(minimumspacing .- ff.turbine_spacing(turbinex, turbiney))
-end
-
-function total_monopile_cost(x, params)
-    cost = 0
-    
-    nturbines = Int(length(x)/2)
-    depthMap = params.depthMap
-
-    # extract x and y locations of turbines from design variables vector
-    turbinex = x[1:nturbines]
-    turbiney = x[nturbines+1:end]
-    
-    for i = eachindex(turbinex)
-        # This works for finding the x and y index of a rectangular depth map with constant x and y steps
-        depth_x_index = ceil((turbinex[i] - minDepthMapX) / xStepSize) 
-        depth_y_index = ceil((turbiney[i] - minDepthMapY) / yStepSize)
-        depth = depthMap[depth_x_index, depth_y_index]
-        cost = cost + calculate_monopile_cost(depth, params)
-    end
-
-    return cost
 end
 
 # Set up the aep wrapper function
@@ -252,11 +250,16 @@ function coe_wrapper(x, params)
     total_ratedpower = sum(ratedpower)
     coe_aep = aep/total_ratedpower # For the LCOE equation we need aep in MWh/MW/year not Wh/year (same as hr/year)
     coe_ratedpower = ratedpower./1000 # needs to be in units of kw
-    cost = ff.Levelized()
-    #cost.FC = cost.FC + total_monopile_cost(x, params)
-    print("\n cost: $cost")
+    
+    refTCC = 1952.0
+    refBOS = 4420 + 474.0
+    refFC = 672.0  # $/kW
+    refFCR = 0.0764 # /year
+    refCapEx = 140.56
+    
+    cost = ff.Levelized(refTCC, refBOS, refFC, refFCR, refCapEx)
     coe = objectivescale.*ff.cost_of_energy(rotordiameter, hubheight, coe_ratedpower,  coe_aep, cost)
-    print("\n COE: $coe \n")
+
     return coe
 end
 
@@ -272,8 +275,8 @@ function wind_farm_opt!(g, x, params)
     boundary_con = boundary_wrapper(x, params)
 
     # combine constraint values and jacobians into overall constraint value and jacobian
-    g[1:(end-nturbines)] = spacing_con[:]
-    g[end-nturbines+1:end] = boundary_con[:]
+    g[1:(end-(nturbines*4))] = spacing_con[:]
+    g[end-(nturbines*4)+1:end] = boundary_con[:]
 
     obj = coe_wrapper(x, params)[1]
     
@@ -294,13 +297,13 @@ lx = zeros(length(x0)) .- boundaryradius
 ux = zeros(length(x0)) .+ boundaryradius
 
 # set general lower and upper bounds for constraints
-ng = Int(nturbines + (nturbines)*(nturbines-1)/2)
-lg = [-Inf*ones(Int((nturbines)*(nturbines - 1)/2)); -Inf*ones(nturbines)]
-ug = [zeros(Int((nturbines)*(nturbines - 1)/2)); zeros(nturbines)]
+ng = Int(nturbines*4 + (nturbines)*(nturbines-1)/2)
+lg = [-Inf*ones(Int((nturbines)*(nturbines - 1)/2)); -Inf*ones(nturbines*4)]
+ug = [zeros(Int((nturbines)*(nturbines - 1)/2)); zeros(nturbines*4)]
 
 # IPOPT options
 ip_options = Dict(
-    "max_iter" => 50,
+    "max_iter" => 100,
     "tol" => 1e-6
 )
 solver = IPOPT(ip_options)
@@ -321,10 +324,13 @@ println("info: ", info)
 println("Initial COE: ", coe)
 println("Final COE: ", coefinal)
 println("COE improvement (%) = ", -100*(coefinal - coe)/coe)
+println("Final Turbine Positioning (x, y):")
 
 # final turbine locations
 turbinexopt = copy(xopt[1:nturbines])
 turbineyopt = copy(xopt[nturbines+1:end])
+println(turbinexopt)
+println(turbineyopt)
 
 
 #-----OPTIMIZED LAYOUT------------
@@ -335,8 +341,8 @@ ff.plotlayout!(ax, turbinexopt, turbineyopt, rotordiameter)
 ax.set(xlabel="Easting (m)", ylabel="Northing (m)")
 
 # and the wind farm boundary
-circle = matplotlib.patches.Circle((0.0, 0.0), boundaryradius, fill=false, color="k")
-ax.add_patch(circle)
+square = matplotlib.patches.Rectangle((-1000.0, -1000.0), 2000, 2000, fill=false, color="k")
+ax.add_patch(square)
 
 # set limits on the plot region
 ax.set(xlim=[-boundaryradius, boundaryradius].*1.01, ylim=[-boundaryradius, boundaryradius].*1.01)

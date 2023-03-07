@@ -8,31 +8,39 @@ using Distributions
 include("Depths.jl")
 include("Monopile.jl")
 
-# set wind farm boundary parameters in meters
-boundarycenter = [0.0, 0.0]
-boundaryradius = 900
-boundary_vertices = [-boundaryradius -boundaryradius; boundaryradius -boundaryradius; boundaryradius boundaryradius; -boundaryradius boundaryradius]
-boundary_normals = [-1 0; 0 -1; 1 0; 0 1]
 
 #--------- SET DEPTH SETTINGS -------------#
+boundary_min_max_latitude = [28.8299, 28.9111]
+depth_map_boundary_latitude = [28.8299*0.9999, 28.9111*1.0001]
 
+boundary_min_max_longitude = [-90.3347, -90.2414]
+depth_map_boundary_longitude = [-90.3347*1.0001, -90.2414*0.9999]
+
+boundary_center_cor = [-90.2287, 28.8299]
+
+boundary_center_x_m = longitude_to_meters(boundary_center_cor[2], boundary_center_cor[1] - boundary_min_max_longitude[1])
+boundary_center_y_m = latitude_to_meters(boundary_center_cor[1] - boundary_min_max_latitude[1])
+
+xRange = longitude_to_meters((boundary_min_max_latitude[2] + boundary_min_max_latitude[1])/2, boundary_min_max_longitude[2] - boundary_min_max_longitude[1])
+yRange = latitude_to_meters(boundary_min_max_latitude[2] - boundary_min_max_latitude[1])
+
+depthXRange = longitude_to_meters((depth_map_boundary_latitude[2] + depth_map_boundary_latitude[1])/2, depth_map_boundary_longitude[2] - depth_map_boundary_longitude[1])
+depthYRange = latitude_to_meters(depth_map_boundary_latitude[2] - depth_map_boundary_latitude[1])
+depthBoundaries = [0 depthXRange; 0 depthYRange]
+
+generateDepthPattern = false
 gaus1D = true
 gaus2D = false
 gausDepthOutward = true
 linDepth = false
 mean_depth = 25
-variance = mean_depth*1.6
+variance = mean_depth*1.0
 
-# gausMinDepth = mean_depth - variance/2
-# gausMaxDepth = mean_depth + variance/2
 gausMinDepth = mean_depth
 gausMaxDepth = mean_depth + variance
 
 linDepthVariance = variance
 linStartDepth = mean_depth - linDepthVariance/2
-monopileCostModel = "Mass" # Select between Linear and Mass
-
-depthBoundaries = [-boundaryradius*1.1 boundaryradius*1.1; -boundaryradius*1.1 boundaryradius*1.1]
 
 if gaus2D
     gausStartDepth = gausMinDepth
@@ -47,25 +55,27 @@ else
     distribution = Normal(gausStartDepth, depthStdDev)
 end
 
-turbinex = zeros(9)
-turbiney = zeros(9)
-turbinex .+= rand.((-900:900, ))
-turbiney .+= rand.((-900:900, ))
+resolution_x = 50
+resolution_y = 50
+depth_file_path = "C:\\Users\\bryce\\Desktop\\FLOW-lab\\Offshore LCOE Optimization\\H06155.xyz"
+
+
+monopileCostModel = "Mass" # Select between Linear and Mass
+
+# set up wind farm boundary parameters in meters
+boundarycenter = (xRange/2, yRange/2)
+boundaryradius = xRange
+boundary_vertices = [0 0; 0 yRange; xRange yRange; xRange boundary_center_y_m; boundary_center_x_m boundary_center_y_m; boundary_center_x_m 0]
+boundary_normals = [-1 0; 0 1; 1 0; 0 -1; 1 0; 0 -1]
+
+#------------ TURBINE SETTINGS ----------------#
+num_turbines = 10
+turbinex = zeros(num_turbines)
+turbiney = zeros(num_turbines)
+turbinex .+= rand.((0:xRange/2, ))
+turbiney .+= rand.((0:yRange/2, ))
 
 # Data for best layout found after 1000 iterations at constant depth
-coe_turbinex = [-514.6762343236603, -899.0423356094258, 899.0535661587471, 191.22553663556835, -215.85037827121627, 500.17226124843137, 899.9897142664346, -710.1414926990467, 701.9381655440102]
-coe_turbiney = [-517.9729989480674, 895.6549046147234, 898.3391430011374, -729.2736923256954, 703.9434254556588, 493.99924385540584, -899.1640352528848, 179.39357995133125, -210.91116032028395]
-
-# turbinex = [-500.0, -500.0, -500.0, 0.0, 0.0, 0.0, 500.0, 500.0, 500.0]
-# turbiney = [-500.0, 0.0, 500.0, -500.0, 0.0, 500.0, -500.0, 0.0, 500.0]
-
-# turbinex = [28.877704224284084, 740.6859225259351, -497.25992420221473, 899.9548364890217, -899.9651383902249, 360.5291908620862, -169.97690734551665, -709.0618487661345, 574.5333095409148]
-# turbiney = [-376.77920124633204, -572.4613482152255, -899.9732498985238, -686.5716393877229, 590.6914144733687, 899.992218697954, 377.5810634427337, -167.06971109544776, 176.59353726185702]
-
-# turbinex = [-640.0, -850.0, -775.0, 259.64523170271053, 24.224923370316663, -228.32592678550265, 850.0, 850.0, 658.8607987292281]
-# turbiney = [-665.5613170694725, 227.46694690010767, 791.8638282387071, -850.0, -4.158546994634754, 850.0, -774.6536811100534, -244.20221868427328, 635.2946573760879]
-
-
 nturbines = length(turbinex)
 
 turbinez = zeros(nturbines)
@@ -73,29 +83,33 @@ turbinez = zeros(nturbines)
 turbineyaw = zeros(nturbines)
 
 # set wind turbine design parameters
-rotordiameter = zeros(nturbines) .+ 125 # m 
-hubheight = zeros(nturbines) .+ 90      # m
+rotordiameter = zeros(nturbines) .+ 220 # m 
+hubheight = zeros(nturbines) .+ 260      # m
 cutinspeed = zeros(nturbines) .+ 3.0    # m/s
 cutoutspeed = zeros(nturbines) .+ 25.0   # m/s 
 ratedspeed = zeros(nturbines) .+ 11.4   # m/s 
-ratedpower = zeros(nturbines) .+ 5.0E6  # W (5 MW)
+ratedpower = zeros(nturbines) .+ 12.0E6  # W (5 MW)
 generatorefficiency = ones(nturbines)
 
 #---------- VISUALIZING THE WIND FARM LAYOUT ----------------#
 
 fig, ax1 = plt.subplots(1)
 
-ff.plotlayout!(ax1, coe_turbinex, coe_turbiney, rotordiameter)
+ff.plotlayout!(ax1, turbinex, turbiney, rotordiameter)
 
 ax1.set(xlabel="Easting (m)", ylabel="Northing (m)")
 
 #circle = matplotlib.patches.Circle((0.0, 0.0), boundaryradius, fill=false, color="k")
-square = matplotlib.patches.Rectangle((-boundaryradius, -boundaryradius), 2*boundaryradius, 2*boundaryradius, fill=false, color="k")
+square = matplotlib.patches.Rectangle((0, 0), xRange, yRange, fill=false, color="k")
 ax1.add_patch(square)
 
-ax1.set(xlim=[-boundaryradius, boundaryradius].*1.01, ylim=[-boundaryradius, boundaryradius].*1.01)
+ax1.set(xlim=[-xRange*0.01, xRange].*1.01, ylim=[-yRange*0.01, yRange].*1.01)
 
-mapDepths(50, [-boundaryradius*1.01, boundaryradius*1.01], [-boundaryradius*1.01, boundaryradius*1.01], distribution, gausStartDepth, linStartDepth, linDepthVariance, gausDepthOutward, linDepth, gaus1D, gaus2D, gausMaxDepth, gausMinDepth)
+if generateDepthPattern
+    mapDepths(50, [-boundaryradius*1.01, boundaryradius*1.01], [-boundaryradius*1.01, boundaryradius*1.01], distribution, gausStartDepth, linStartDepth, linDepthVariance, gausDepthOutward, linDepth, gaus1D, gaus2D, gausMaxDepth, gausMinDepth)
+else
+    depthMap = depthMap = import_depth_from_xyz(depth_file_path, resolution_x, resolution_y, depth_map_boundary_latitude, depth_map_boundary_longitude)
+end
 
 display(fig)
 
@@ -174,14 +188,13 @@ constraintscalespacing = 1.0
 minimumspacing = 159.0*1.2
 
 # set up a struct for use in optimization functions, these are the non-differentiated parameters
-mutable struct params_struct{}
+mutable struct params_struct5{}
     modelset
     rotorsamplepointsy
     rotorsamplepointsz
     turbinez
     ambientti
     rotordiameter
-    boundarycenter
     boundaryradius
     boundary_vertices
     boundary_normals
@@ -199,37 +212,31 @@ mutable struct params_struct{}
     ratedpower
     windresource
     powermodels
-    gaus1D
-    gaus2D
-    gausDepthOutward
-    linDepth
-    linDepthVariance
-    gausMinDepth
-    gausMaxDepth
-    linStartDepth
-    distribution
+    depthMap
     depthBoundaries
     refLCOE
     meanWindspeed
     monopileCostModel
 end
 
-params = params_struct(modelset, rotorsamplepointsy, rotorsamplepointsz, turbinez, ambientti,
-    rotordiameter, boundarycenter, boundaryradius, boundary_vertices, boundary_normals, objectivescale, constraintscaleboundary,
+params = params_struct5(modelset, rotorsamplepointsy, rotorsamplepointsz, turbinez, ambientti,
+    rotordiameter, boundaryradius, boundary_vertices, boundary_normals, objectivescale, constraintscaleboundary,
     constraintscalespacing, minimumspacing, hubheight, turbineyaw,
     ctmodels, generatorefficiency, cutinspeed, cutoutspeed, ratedspeed, ratedpower,
-    windresource, powermodels, gaus1D, gaus2D, gausDepthOutward, linDepth, linDepthVariance,
-     gausMinDepth, gausMaxDepth, linStartDepth, distribution, depthBoundaries, refLCOE, windspeed, monopileCostModel)
+    windresource, powermodels, depthMap, depthBoundaries, refLCOE, windspeed, monopileCostModel)
 
 
 # Set up wrapper functions for the objective and constraints
 function boundary_wrapper(x, params)
     # include the relevant params
-    boundarycenter = params.boundarycenter
-    boundaryradius = params.boundaryradius
     boundary_vertices = params.boundary_vertices
     boundary_normals = params.boundary_normals
     constraintscaleboundary = params.constraintscaleboundary
+
+    boundary_x_closed = boundary_vertices[1, :]
+    boundary_y_closed = boundary_vertices[2, :]
+
+    boundary_corner_indices = []
 
     nturbines = Int(length(x)/2)
 
@@ -238,8 +245,7 @@ function boundary_wrapper(x, params)
     turbiney = x[nturbines+1:end]
 
     # get and return boundary distances
-    #return ff.circle_boundary(boundarycenter, boundaryradius, turbinex, turbiney).*constraintscaleboundary
-    return ff.convex_boundary(boundary_vertices, boundary_normals, turbinex, turbiney).*constraintscaleboundary
+    return ff.splined_boundary(turbinex, turbiney, ).*constraintscaleboundary
 end
 
 # Set up spacing constraint wrapper function
@@ -268,16 +274,8 @@ function total_monopile_cost_wrapper(x, params)
     rated_windspeed = params.ratedspeed
     rated_power = params.ratedpower
     depthBoundaries = params.depthBoundaries
-    gaus1D = params.gaus1D
-    gaus2D = params.gaus2D
-    centerIsShallow = params.gausDepthOutward
-    linDepth = params.linDepth
-    linDepthVariance = params.linDepthVariance
-    gausMaxDepth = params.gausMaxDepth
-    gausMinDepth = params.gausMinDepth
-    linStartDepth = params.linStartDepth
+    depthMap = params.depthMap
     refCost = params.refLCOE
-    data = params.distribution
     monopileModel = params.monopileCostModel
 
     # extract x and y locations of turbines from design variables vector
@@ -290,18 +288,19 @@ function total_monopile_cost_wrapper(x, params)
     cost = 0
 
     for i = eachindex(turbinex)
-        if gaus2D
-            pos = [Int(ceil(1000*turbinex[i]))/1000, Int(ceil(1000*turbiney[i]))/1000]
-            depth = gaussianTwoD(distribution, gausMaxDepth, gausMinDepth, pos, centerIsShallow)
-        else
-            linearQuant = Int(ceil(1000*(turbiney[i] - depthBoundaries[2,1] + 0.0001)/yRange))/1000
-            gaussQuant = Int(ceil(1000*(turbinex[i] - depthBoundaries[1,1] + 0.0001)/xRange))/1000
-            distDepth = quantile(data, gaussQuant)[1]
-            difference = abs(gausMaxDepth - distDepth)
-            
-            depth = (gaus1D ? gaussianOneD(gausStartDepth, difference, gausDepthOutward) : 0)
-            depth = (linDepth ? depth + linearDepth(linDepthVariance, linStartDepth, linearQuant) : depth)
-        end
+        i_ind = Int(ceil(10000*turbiney[i]*size(depthMap, 1)))/(yRange*10000)
+        up_i_ind = min(size(depthMap, 1), Int(ceil(i_ind)))
+        low_i_ind = max(1, Int(floor(i_ind)))
+
+        j_ind = Int(ceil(10000*turbinex[i]*size(depthMap, 2)))/(10000*xRange)
+        up_j_ind = min(size(depthMap, 2), Int(ceil(j_ind)))
+        low_j_ind = max(1, Int(floor(j_ind)))
+
+        i_indices = [low_i_ind, up_i_ind]
+        j_indices = [low_j_ind, up_j_ind]
+
+        depth = depth_at_location(i_ind, j_ind, i_indices, j_indices, depthMap, size(depthMap, 2), size(depthMap, 1))
+        
         if monopileModel == "Linear"
             latest = topfarm_monopile_cost(depth, refCost.TCC, nturbines)
             cost += latest
@@ -373,8 +372,8 @@ function wind_farm_opt!(g, x, params)
     # combine constraint values and jacobians into overall constraint value and jacobian
     #g[1:(end-nturbines)] = spacing_con[:]
     #g[end-nturbines+1:end] = boundary_con[:]
-    g[1:(end-(nturbines*4))] = spacing_con[:]
-    g[end-(nturbines*4)+1:end] = boundary_con[:]
+    g[1:(end-(nturbines*6))] = spacing_con[:]
+    g[end-(nturbines*6)+1:end] = boundary_con[:]
 
     obj = coe_wrapper(x, params)[1]
 
@@ -421,16 +420,13 @@ best_coe = coe_initial;
 best_layout = [copy(turbinex); copy(turbiney)]
 best_opt = [copy(turbinex); copy(turbiney)]
 # set general lower and upper bounds for design variable
-lx = zeros(length(best_layout)) .- boundaryradius
-ux = zeros(length(best_layout)) .+ boundaryradius
+lx = zeros(length(best_layout))
+ux = zeros(length(best_layout)) .+ xRange
 
 # set general lower and upper bounds for constraints
-#ng = Int(nturbines + (nturbines)*(nturbines-1)/2) FOR CIRCLE BOUNDARY
-#lg = [-Inf*ones(Int((nturbines)*(nturbines - 1)/2)); -Inf*ones(nturbines)]
-#ug = [zeros(Int((nturbines)*(nturbines - 1)/2)); zeros(nturbines)]
-ng = Int(nturbines*4 + (nturbines)*(nturbines-1)/2)
-lg = [-Inf*ones(Int((nturbines)*(nturbines - 1)/2)); -Inf*ones(nturbines*4)]
-ug = [zeros(Int((nturbines)*(nturbines - 1)/2)); zeros(nturbines*4)]
+ng = Int(nturbines*6 + (nturbines)*(nturbines-1)/2)
+lg = [-Inf*ones(Int((nturbines)*(nturbines - 1)/2)); -Inf*ones(nturbines*6)]
+ug = [zeros(Int((nturbines)*(nturbines - 1)/2)); zeros(nturbines*6)]
 
 x0 = [copy(turbinex);copy(turbiney)]
 
@@ -459,20 +455,21 @@ options = Options(solver=solver, derivatives=ForwardAD())
 
 # println("Finished in : ", clk, " (s)")
 # println("info: ", info)
-
-for i = 1:500
+t1 = time()
+for i = 1:10
     global best_coe
     global lx
     global ux
     global ng
     global lg
     global ug
+    global best_layout
     global best_opt
     global nturbines
     local turbinex = zeros(nturbines)
     local turbiney = zeros(nturbines)
-    local turbinex .+= rand.((-900:900, ))
-    local turbiney .+= rand.((-900:900, ))
+    local turbinex .+= rand.((0:xRange/2, ))
+    local turbiney .+= rand.((0:yRange/2, ))
 
     local x0 = [copy(turbinex);copy(turbiney)]
 
@@ -488,53 +485,33 @@ for i = 1:500
     local fopt
     local info
     global out
+    t3 = time()
     xopt, fopt, info, out = minimize(obj_func!, x0, ng, lx, ux, lg, ug, options)
-
+    t4 = time()
 
     local coefinal = fopt/objectivescale
     if coefinal < best_coe
         best_coe = coefinal
+        best_layout = x0
         best_opt = xopt
     end
     
-    println("BSSF: $best_coe")
-    println("BLSF: ", best_opt)
-    println("TOTAL SOLUTIONS: $i")
+    println("TOTAL SOLUTIONS: $i Time: ", t4 - t3)
 end
+t2 = time()
+println()
+println()
+println("TOTAL TIME: ", t2 - t1)
 
-# print("Init LCOE WITHOUT Monopiles: ")
-# println(ff.cost_of_energy(rotordiameter, hubheight, coe_ratedpower, coe_aep, refLCOE), " \$/MWh")
-# println("Init LCOE of Monopiles: ", monopilesCost*refLCOE.FCR/(coe_aep/1000), " \$/MWh")
-# println("Final LCOE of Monopiles: ", total_monopile_cost_wrapper(xopt, params)*refLCOE.FCR/(coe_aep/1000), " \$/Mwh" )
-# println("Initial COE: ", coe_initial, " \$/MWh")
-# println("Final COE: ", coefinal, " \$/MWh")
-# println("COE improvement (%) = ", -100*(coefinal - coe_initial)/coe_initial)
 
 println("BEST LCOE: $best_coe")
+println("BEST LAYOUT: ", best_opt)
 
 # final turbine locations
 turbinexopt = copy(best_opt[1:nturbines])
 turbineyopt = copy(best_opt[nturbines+1:end])
 
-currPos = [copy(coe_turbinex);copy(coe_turbiney)]
-monopilesCost = total_monopile_cost_wrapper(currPos, params)
-cost = ff.Levelized(refLCOE.TCC+monopilesCost, refLCOE.BOS, refLCOE.FC,
-    refLCOE.FCR, refLCOE.OpEx)    
 
-total_ratedpower = sum(ratedpower)
-new_aep = ff.calculate_aep(coe_turbinex, coe_turbiney, turbinez, rotordiameter,
-    hubheight, turbineyaw, ctmodels, generatorefficiency, cutinspeed,
-    cutoutspeed, ratedspeed, ratedpower, windresource, powermodels,
-    modelset, rotor_sample_points_y=rotorsamplepointsy, 
-    rotor_sample_points_z=rotorsamplepointsz)
-base_aep = new_aep/total_ratedpower # For the LCOE equation we need aep in MWh/MW/year not Wh/year (same as hr/year)
-coe_ratedpower = ratedpower./1000 # needs to be in units of kw
-base_coe = ff.cost_of_energy(rotordiameter, hubheight, coe_ratedpower, base_aep, cost)
-
-improvement = (-100*(best_coe - base_coe)/base_coe)
-
-println("Base COE: $base_coe")
-println("Improvement: $improvement")
 
 #-----PLOT OPTIMIZED LAYOUT------------#
 fig, ax = plt.subplots(1)
@@ -543,12 +520,10 @@ ff.plotlayout!(ax, turbinexopt, turbineyopt, rotordiameter)
 
 ax.set(xlabel="Easting (m)", ylabel="Northing (m)")
 
-# and the wind farm boundary
 #circle = matplotlib.patches.Circle((0.0, 0.0), boundaryradius, fill=false, color="k")
-square = matplotlib.patches.Rectangle((-boundaryradius, -boundaryradius), 2*boundaryradius, 2*boundaryradius, fill=false, color="k")
+square = matplotlib.patches.Rectangle((0, 0), xRange, yRange, fill=false, color="k")
 ax.add_patch(square)
 
-# set limits on the plot region
-ax.set(xlim=[-boundaryradius, boundaryradius].*1.01, ylim=[-boundaryradius, boundaryradius].*1.01)
+ax.set(xlim=[-xRange*0.01, xRange].*1.01, ylim=[-yRange*0.01, yRange].*1.01)
 
 display(fig)
